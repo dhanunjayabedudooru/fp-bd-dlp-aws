@@ -13,7 +13,16 @@
         "Trusted_Connection": "yes",
         "UID": ""
     },
+    "AzureIngestionMode": "Legacy",
     "AzureWorkspaceID": "",
     "AzurePrimaryKey": "",
-    "LogName": "ForcepointDLPEvents"
+    "LogName": "ForcepointDLPEvents",
+    "AzureLogsIngestion": {
+        "TenantId": "",
+        "ClientId": "",
+        "ClientSecret": "",
+        "DataCollectionEndpoint": "",
+        "DataCollectionRuleImmutableId": "",
+        "StreamName": "Custom-ForcepointDLPEventsV2_CL"
+    }
 }

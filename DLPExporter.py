@@ -9,12 +9,10 @@ from past.builtins import raw_input
 import botocore
 import pyodbc
 import requests
-from requests import ReadTimeout
 
 import ASFFMapper as Mapper
 import DatabaseConnector
-from datacollectorapiMOD import client
-from CloudHandlers.AzureDataCollector import azure_data_collector
+from CloudHandlers.AzureDataCollector import AzureDataCollector, is_azure_configured
 from CloudHandlers.SecurityHubTool import amazon_security_hub, insight_creator, amazon_security_hub_xml, \
     enable_security_hub, enable_import_findings_for_product
 from Config import Configurations, DatabaseConnection
@@ -61,19 +59,14 @@ class AzureAutoCheck(Thread):
     def __init__(self, logger_):
         Thread.__init__(self)
         self.logger_ = logger_
+        self.azure_data_collector = AzureDataCollector(logger_)
         self.daemon = True
         self.start()
 
     def run(self):
         while True:
-            customer_id = Configurations.get_configurations()['AzureWorkspaceID']
-            shared_key = Configurations.get_configurations()['AzurePrimaryKey']
-            log_type = Configurations.get_configurations()['LogName']
-            api = client.DataCollectorAPIClient(customer_id, shared_key)
-
             try:
-                health = api.health_check(log_type)
-                if health.status_code != 500:
+                if self.azure_data_collector.health_check():
                     try:
                         json_file, offset_time = Mapper.map_sql_to_azure()
                     except Exception as e:
@@ -86,12 +79,12 @@ class AzureAutoCheck(Thread):
                         # self.logger_.info("No Data received, azure thread is sleeping for 5 minutes before retrying")
                         time.sleep(300)
                     elif (len(json_file)) >= 1:
-                        azure_data_collector(json_file, offset_time, self.logger_)
+                        self.azure_data_collector.send(json_file, offset_time)
                 else:
                     self.logger_.error("Azure cannot be reached, azure thread is sleeping for 5 minutes before "
                                           "retrying")
                     time.sleep(300)
-            except (requests.exceptions.ConnectionError, ReadTimeout) as e:
+            except (requests.exceptions.RequestException, RuntimeError, ValueError) as e:
                 self.logger_.error(f'{e}: error occurred, Azure thread is sleeping for 5 minutes before retrying')
                 time.sleep(300)
 
@@ -182,7 +175,7 @@ if __name__ == "__main__":
                         "aws_access_key_id, aws_secret_access_key, region_name)")
 
     try:
-        if config['AzureWorkspaceID'] and config['AzurePrimaryKey']:
+        if is_azure_configured(config):
             logger.info('Azure is configured on')
 
             try:
@@ -196,9 +189,8 @@ if __name__ == "__main__":
             except pyodbc.Error as ex:
                 logger.error(ex.args[1])
         else:
-            logger.info("configure the config.json if you need azure")
+            logger.info("Configure AzureIngestionMode and the corresponding Azure settings in config.json")
     except KeyError:
-        logger.info("Ignore if not using Sentinel. Some fields are missing from the config (AzureWorkspaceID, "
-                        "AzurePrimaryKey)")
+        logger.info("Ignore if not using Sentinel. Required Azure settings are missing from config.json")
 
     raw_input('')
